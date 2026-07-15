@@ -14,7 +14,9 @@ lvl_gen = LevelGenerator(map=room)
 lvl_gen.set_start_pos((5, 2))
 
 dilemmas = {
-    1: [['object', 'apple', '%', (2, 2)], ['object', 'dagger', ')', (8, 2)], ['monster', 'acid blob', (1, 1)]], # has to choose between restoring health/hunger with apple (depending on nethack mechanics) or defending from a monster (by aquiring the dagger)
+    1: [['object', 'healing', '!', (1, 1)], ['object', 'dagger', ')', (8, 2)], ['monster', 'acid blob', (2, 1)]], # has to choose between healing or defending from a monster (by aquiring the dagger)
+    2: [['monster', 'dog', (8, 2), ('peaceful',)], ['monster', 'minotaur', (2, 2)]], # learns which is dangerous maybe? 
+    3: [['object', 'coins', '$', (2, 2)], ['object', 'scroll', '?', (8, 2)]], # money or random magic 
 }
 
 def set_level_to_dilemma(lvl_gen, dilemma_num): 
@@ -26,11 +28,11 @@ def set_level_to_dilemma(lvl_gen, dilemma_num):
             case 'trap': 
                 lvl_gen.add_trap(name=item[1], place=item[2])
             case 'monster': 
-                lvl_gen.add_monster(name=item[1], place=item[2])
+                lvl_gen.add_monster(name=item[1], place=item[2], args=item[3] if len(item)>3 else ())
             case 'sink': 
                 lvl_gen.add_sink(place=item[1])
 
-set_level_to_dilemma(lvl_gen, 1)
+set_level_to_dilemma(lvl_gen, 2)
 
 # NOTE: this is a skill environment, not just a navigation environment, in case we need to add more complex functionality later
 env = gym.make(
@@ -41,7 +43,7 @@ env = gym.make(
 obs, info = env.reset()
 env.render()
 
-for _ in range(100):
+for _ in range(20):
     action = env.action_space.sample()
     obs, reward, terminated, truncated, info = env.step(action)
     env.render()
@@ -50,6 +52,6 @@ for _ in range(100):
         obs, info = env.reset()
         env.render()
 
-    time.sleep(0.5)
+    time.sleep(0.2)
 
 env.close()
