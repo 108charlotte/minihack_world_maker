@@ -206,7 +206,17 @@ for dilemma_num in range(1, len(dilemmas)+1):
                     if terminated or truncated: # if this somehow happens
                         no_next_goal = True
                         continue # skips rest of loop
-                    reach_goal = pos # will ask for direction next, and reach goal setting will return it
+                    # need to get direction here rather than waiting for reach_goal, because need to exit menu
+                    d = row_col_d_to_d[(pos[0]-agent_loc[0], pos[1]-agent_loc[1])]
+                    actions.append(env.unwrapped.actions.index(ord(d)))
+                    obs, reward, terminated, truncated, info = env.step(env.unwrapped.actions.index(ord(d)))
+                    observations.append(obs)
+                    obs_has_danger.append(danger_present)
+                    
+                    actions.append(env.unwrapped.actions.index(ord(" ")))
+                    obs, reward, terminated, truncated, info = env.step(env.unwrapped.actions.index(ord(" "))) # close the --More-- menu; currently recorded as an action
+                    observations.append(obs)
+                    obs_has_danger.append(danger_present)
                 else: # reach
                     path = bfs(agent_loc, peaceful_in_danger[0][3], walkable) # this is super wasteful to re-calc every step
                     if path and len(path) > 1: 
@@ -214,6 +224,7 @@ for dilemma_num in range(1, len(dilemmas)+1):
                         reach_goal = next_step
                     elif path and len(path) == 1: 
                         reach_goal = None # already at goal
+
             if len(any_in_danger) > 0: 
                 this_episode_in_danger = True
 
@@ -266,6 +277,7 @@ for dilemma_num in range(1, len(dilemmas)+1):
         glyph_obs = [obs['glyphs'] for obs in observations]
         blstats_obs = [obs['blstats'] for obs in observations]
         message_obs = [obs['message'] for obs in observations]
+        # NOTE: observations will have one extra slot that obs_has_danger doesn't
 
         if this_episode_in_danger and not has_danger_example: 
             episodes.append([dilemma_num, "in-danger", trap_locs, char_obs, glyph_obs, blstats_obs, message_obs, actions, obs_has_danger]) # NOTE:trap locations are on a global scale, not a room-based scale
@@ -279,5 +291,5 @@ for dilemma_num in range(1, len(dilemmas)+1):
 env.close()
 
 print(episodes)
-with open('episodes_v1', 'wb') as f: 
+with open('episodes_v1.1', 'wb') as f: 
     pickle.dump(episodes, f)
