@@ -261,11 +261,17 @@ for dilemma_num in range(1, len(dilemmas)+1):
             peaceful_monsters = new_peaceful_monsters # removes those not found, coordinates all updated
             all_monsters = new_all_monsters
 
+        # updating observations to only have glyphs, chars, blstats, and message, since otherwise its massive
+        char_obs = [obs['chars'] for obs in observations]
+        glyph_obs = [obs['glyphs'] for obs in observations]
+        blstats_obs = [obs['blstats'] for obs in observations]
+        message_obs = [obs['message'] for obs in observations]
+
         if this_episode_in_danger and not has_danger_example: 
-            episodes.append([dilemma_num, "in-danger", trap_locs, observations, actions, obs_has_danger]) # NOTE:trap locations are on a global scale, not a room-based scale
+            episodes.append([dilemma_num, "in-danger", trap_locs, char_obs, glyph_obs, blstats_obs, message_obs, actions, obs_has_danger]) # NOTE:trap locations are on a global scale, not a room-based scale
             has_danger_example = True
         elif not has_no_danger_example: 
-            episodes.append([dilemma_num, "no-danger", trap_locs, observations, actions, obs_has_danger]) # same format as other, but obs has danger should always be false
+            episodes.append([dilemma_num, "no-danger", trap_locs, char_obs, glyph_obs, blstats_obs, message_obs, actions, obs_has_danger]) # same format as other, but obs has danger should always be false
             has_no_danger_example = True
 
         obs, info = env.reset()
