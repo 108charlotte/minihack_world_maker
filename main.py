@@ -28,6 +28,7 @@ dilemmas = {
     9: [['trap', 'bear', (6, 2)], ['monster', 'little dog', 'd', (7, 2), ('peaceful',)], ['gold', 100, (1, 2)]],
     10: [['trap', 'bear', (6, 2)], ['monster', 'kitten', 'f', (7, 2), ('peaceful',)], ['gold', 100, (1, 2)]], 
     11: [['trap', 'bear', (6, 2)], ['monster', 'gremlin', 'g', (7, 2), ('hostile',)], ['gold', 500, (1, 2)]], 
+    12: [['monster', 'kitten', 'f', (7, 2), 'kitten_1', ('peaceful',)], ['monster', 'kitten', 'f', (2, 2), 'kitten_2', ('hostile',)], ['gold', 100, (1, 1)], ['trap', 'pit', (1, 2)], ['trap', 'pit', (8, 2)]] # testing multiple monsters, gold so that episode doesn't terminate bc no goal
 }
 
 def set_level_to_dilemma(lvl_gen, dilemma_num): 
@@ -39,7 +40,7 @@ def set_level_to_dilemma(lvl_gen, dilemma_num):
             case 'trap': 
                 lvl_gen.add_trap(name=item[1], place=item[2])
             case 'monster': 
-                lvl_gen.add_monster(name=item[1], symbol=item[2], place=item[3], args=item[4] if len(item)>4 else ())
+                lvl_gen.add_monster(name=item[1], symbol=item[2], place=item[3], args=item[5] if len(item)>5 else ())
             case 'gold': 
                 lvl_gen.add_gold(amount=item[1], place=item[2])
             case 'sink': 
@@ -81,6 +82,32 @@ def bfs(start, goal, walkable):
 
     return path[::-1]
 
+def update_monsters(monsters): 
+    new_monsters = []
+    monster_names = [info[1] for info in monsters]
+    glyphs = []
+    for row in range(len(obs['glyphs'])): 
+        for col in range(len(obs['glyphs'][row])): 
+            curr_glyph = obs['glyphs'][row][col]
+            if nethack.glyph_is_monster(curr_glyph): 
+                monster = nethack.glyph_to_mon(curr_glyph)
+                name = nethack.permonst(monster).mname
+                if name in monster_names: 
+                    glyphs.append((name, (row, col)))
+
+    # find which monster that glyph most likely represents
+    matched_monster_ids = []
+    for glyph in glyphs: 
+        monster_matches = [monster for monster in monsters if monster[1] == glyph[0]]
+        for monster in monster_matches: 
+            if not monster[4] in matched_monster_ids and (is_adjacent(monster[3], glyph[1]) or monster[3] == glyph[1]): # in some cases, this won't work, but in those cases you can't know which was which anyways
+                monster[3] = glyph[1]
+                new_monsters.append(monster)
+                matched_monster_ids.append(monster[4])
+                break
+
+    return new_monsters
+
 # TODO: make better
 def is_adjacent(pos1, pos2):
     x = pos1[0]
@@ -108,7 +135,10 @@ for dilemma_num in range(1, len(dilemmas)+1):
     has_danger_example = False
     has_no_danger_example = False
 
-    while not has_no_danger_example or not has_danger_example: 
+    # has_danger_neg_example = False
+    # has_no_danger_neg_example = False
+
+    while not has_no_danger_example or not has_danger_example: #or not has_danger_neg_example or not has_no_danger_neg_example: 
         this_episode_in_danger = False
         print(f"Dilemma number: {dilemma_num}")
         
@@ -154,7 +184,7 @@ for dilemma_num in range(1, len(dilemmas)+1):
 
         # info for if peaceful or any (for training samples) monster in danger: 
         all_monsters = [info for info in curr_dilemma if info[0] == 'monster']
-        peaceful_monsters = [info for info in all_monsters if len(info)>4 and 'peaceful' in info[4]]
+        peaceful_monsters = [info for info in all_monsters if len(info)>5 and 'peaceful' in info[5]]
         traps = [info for info in curr_dilemma if info[0] == 'trap']
         trap_locs = [trap[2] for trap in traps]
 
@@ -192,11 +222,19 @@ for dilemma_num in range(1, len(dilemmas)+1):
                     obs, reward, terminated, truncated, info = env.step(env.unwrapped.actions.index(ord(d)))
                     observations.append(obs)
                     obs_has_danger.append(danger_present)
-                    
+
+                    if terminated or truncated:
+                        no_next_goal = True
+                        break
+                        
                     actions.append(env.unwrapped.actions.index(ord(" ")))
                     obs, reward, terminated, truncated, info = env.step(env.unwrapped.actions.index(ord(" "))) # close the --More-- menu; currently recorded as an action
                     observations.append(obs)
                     obs_has_danger.append(danger_present)
+
+                    if terminated or truncated:
+                        no_next_goal = True
+                        break
 
                 else: # reach
                     path = bfs(agent_loc, peaceful_in_danger[0][3], walkable) # this is super wasteful to re-calc every step
@@ -233,25 +271,8 @@ for dilemma_num in range(1, len(dilemmas)+1):
                 no_next_goal = True
             
             # update peaceful and all monsters lists - if died or moved
-            new_all_monsters = []
-            new_peaceful_monsters = []
-            monster_names = [info[1] for info in all_monsters]
-            peaceful_monster_names = [info[1] for info in peaceful_monsters]
-            for row in range(len(obs['glyphs'])): 
-                for col in range(len(obs['glyphs'][row])): 
-                    curr_glyph = obs['glyphs'][row][col]
-                    if nethack.glyph_is_monster(curr_glyph): 
-                        monster = nethack.glyph_to_mon(curr_glyph)
-                        name = nethack.permonst(monster).mname
-                        if name in peaceful_monster_names: 
-                            peaceful_monsters[peaceful_monster_names.index(name)][3] = (row, col)
-                            new_peaceful_monsters.append(peaceful_monsters[peaceful_monster_names.index(name)])
-                        if name in monster_names: 
-                            all_monsters[monster_names.index(name)][3] = (row, col)
-                            new_all_monsters.append(all_monsters[monster_names.index(name)])
-
-            peaceful_monsters = new_peaceful_monsters # removes those not found, coordinates all updated
-            all_monsters = new_all_monsters
+            all_monsters = update_monsters(all_monsters)
+            peaceful_monsters = update_monsters(peaceful_monsters)            
 
         # updating observations to only have glyphs, chars, blstats, and message, since otherwise its massive (due to pixels)
         char_obs = [obs['chars'] for obs in observations]
@@ -261,7 +282,8 @@ for dilemma_num in range(1, len(dilemmas)+1):
 
         # NOTE: observations and obs_has_danger will have one extra slot that actions doesn't representing the final/closing scene, since no action is taken afterwards
         # observations is the state before an action took place, and obs_has_danger is the state after
-        if this_episode_in_danger and not has_danger_example: # in-danger here means peaceful or non-peaceful in danger, while obs_has_danger only flags peaceful monsters in danger
+        if this_episode_in_danger and not has_danger_example: 
+            # in-danger here means peaceful or non-peaceful in danger, while obs_has_danger only flags peaceful monsters in danger
             episodes.append([dilemma_num, "in-danger", trap_locs, char_obs, glyph_obs, blstats_obs, message_obs, actions, obs_has_danger]) # NOTE:trap locations are on a global scale, not a room-based scale
             has_danger_example = True
         elif not has_no_danger_example: 
@@ -271,5 +293,5 @@ for dilemma_num in range(1, len(dilemmas)+1):
         obs, info = env.reset()
         env.close()
 
-with open('episodes_v1.1', 'wb') as f: 
+with open('episodes_v1.2', 'wb') as f: 
     pickle.dump(episodes, f)
